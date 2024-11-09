@@ -5,4 +5,5 @@ run: build
 	@./bin/reverse-proxy
 
 test:
-	@go test ./... --race
+	@go test ./... -v --race
+
