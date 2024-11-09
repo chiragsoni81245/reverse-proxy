@@ -7,9 +7,12 @@ import (
 	"net"
 )
 
+type getBackendFunc func(string) (string, error)
+
 type Server struct {
     addr string
     listener net.Listener
+    getBackend getBackendFunc
 }
 
 func (s *Server) startAcceptConnLoop() error {
@@ -50,32 +53,35 @@ func (s *Server) handleConn(conn net.Conn) {
 
     if !ok && authPacket.Type != packet.AuthPacket {
         conn.Close()
-        close(pktRCh)
         return
     }
 
     err := s.authenticate(authPacket)
     if err != nil {
         conn.Close()
-        close(pktRCh)
         return
     }
 
     // Connect with backend server
     // To-Do: This needs to be different package as backend selection algo should decide which backend to choose
-    backendConn, err := net.Dial("tcp", "127.0.0.1:9000")
+    backendAddr, err := s.getBackend(conn.RemoteAddr().String())
     if err != nil {
         conn.Close()
-        close(pktRCh)
+        return
+    }
+    backendConn, err := net.Dial("tcp", backendAddr)
+    if err != nil {
+        conn.Close()
         return
     }
 
     s.handleCommunication(conn, backendConn)
 }
 
-func NewServer(host string, port int) (*Server){
+func NewProxyServer(host string, port int, getBackend getBackendFunc) (*Server){
     return &Server{
         addr: fmt.Sprintf("%s:%d", host, port),
+        getBackend: getBackend,
     }
 }
 

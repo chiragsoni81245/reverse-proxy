@@ -2,7 +2,6 @@ package main
 
 import (
 	"chiragsoni81245/reverse-proxy/packet"
-	"fmt"
 	"net"
 	"testing"
 	"time"
@@ -11,8 +10,8 @@ import (
 )
 
 
-func startPingPongBackendServer(host string, port int) (error){
-    listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", host, port))
+func startPingPongBackendServer(addr string) (error){
+    listener, err := net.Listen("tcp", addr) 
     if err != nil {
         return err
     }
@@ -32,12 +31,17 @@ func startPingPongBackendServer(host string, port int) (error){
     return nil
 }
 
-func TestServer(t *testing.T) {
-    err := startPingPongBackendServer("127.0.0.1", 9000)
+func getPingPongBackend(clientAddr string) (string, error){
+    backendAddr := "127.0.0.1:9000"
+    err := startPingPongBackendServer(backendAddr)
     if err != nil {
-        t.Error(err)
+        return "", err
     }
-    proxy := NewServer("127.0.0.1", 8000)
+    return backendAddr, nil
+}
+
+func TestServer(t *testing.T) {
+    proxy := NewProxyServer("127.0.0.1", 8000, getPingPongBackend)
     go proxy.startAcceptConnLoop()
     time.Sleep(1*time.Second)
 
@@ -53,15 +57,18 @@ func TestServer(t *testing.T) {
 
     data := []byte{'c','h','i','r','a','g'}
     buf = packet.GetPacketBuffer(packet.DataPacket, data)    
-    proxyClient.Write(buf.Bytes())
-
     pktRCh := packet.NewPacketReader(proxyClient)
-    pkt := <-pktRCh 
-    assert.Equal(t, pkt.Type, packet.DataPacket)
-    assert.Equal(t, pkt.ContentLength, int64(len(data)))
-    outputData, err := pkt.GetAllData()
-    if err != nil {
-        t.Error(err)
+
+    for i:=0; i<3; i++ {
+        proxyClient.Write(buf.Bytes())
+
+        pkt := <-pktRCh 
+        assert.Equal(t, pkt.Type, packet.DataPacket)
+        assert.Equal(t, pkt.ContentLength, int64(len(data)))
+        outputData, err := pkt.GetAllData()
+        if err != nil {
+            t.Error(err)
+        }
+        assert.Equal(t, outputData, data)
     }
-    assert.Equal(t, outputData, data)
 }
